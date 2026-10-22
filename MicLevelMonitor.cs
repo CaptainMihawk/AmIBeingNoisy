@@ -5,6 +5,8 @@ namespace LoudEnv;
 
 public sealed class MicLevelMonitor : IDisposable
 {
+    public const int PollIntervalMs = 100;
+
     private readonly MMDeviceEnumerator _enumerator = new();
     private readonly MMDevice _device;
 
@@ -23,6 +25,15 @@ public sealed class MicLevelMonitor : IDisposable
         for (int i = 0; i < collection.Count; i++)
             endpoints.Add((i, collection[i].FriendlyName));
         return endpoints;
+    }
+
+    public async Task RunAsync(IProgress<float> level, CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            level.Report(_device.AudioMeterInformation.MasterPeakValue);
+            await Task.Delay(PollIntervalMs, ct).ConfigureAwait(false);
+        }
     }
 
     private MMDevice ResolveDefault()
