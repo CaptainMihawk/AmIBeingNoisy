@@ -9,6 +9,7 @@ public sealed class SettingsForm : Form
     private readonly DateTimePicker _end;
     private readonly TextBox _logPath;
     private readonly CheckBox _sound;
+    private readonly CheckBox _startWithWindows;
 
     public AppSettings Settings { get; private set; } = new();
 
@@ -19,7 +20,7 @@ public sealed class SettingsForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(470, 280);
+        ClientSize = new Size(470, 310);
         Font = new Font("Segoe UI", 9F);
 
         var layout = new TableLayoutPanel
@@ -27,7 +28,7 @@ public sealed class SettingsForm : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(12),
             ColumnCount = 2,
-            RowCount = 7,
+            RowCount = 8,
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -104,6 +105,13 @@ public sealed class SettingsForm : Form
             AutoSize = true,
         };
 
+        _startWithWindows = new CheckBox
+        {
+            Text = "Iniciar com o Windows",
+            Checked = StartupRegistration.IsEnabled(),
+            AutoSize = true,
+        };
+
         var timePanel = new FlowLayoutPanel
         {
             AutoSize = true,
@@ -149,7 +157,8 @@ public sealed class SettingsForm : Form
         layout.Controls.Add(new Label { Text = "Log:", AutoSize = true, Margin = new Padding(0, 5, 0, 0) }, 0, 4);
         layout.Controls.Add(logPanel, 1, 4);
         layout.Controls.Add(_sound, 1, 5);
-        layout.Controls.Add(buttons, 1, 6);
+        layout.Controls.Add(_startWithWindows, 1, 6);
+        layout.Controls.Add(buttons, 1, 7);
 
         Controls.Add(layout);
         AcceptButton = save;
@@ -232,6 +241,20 @@ public sealed class SettingsForm : Form
             LogPath = fullPath,
             AlertSound = _sound.Checked,
         };
+
+        try
+        {
+            StartupRegistration.SetEnabled(_startWithWindows.Checked);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException
+                                       or System.Security.SecurityException
+                                       or IOException
+                                       or InvalidOperationException)
+        {
+            MessageBox.Show(this, $"Não foi possível alterar a inicialização com o Windows: {ex.Message}",
+                "LoudEnv", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
 
         try
         {

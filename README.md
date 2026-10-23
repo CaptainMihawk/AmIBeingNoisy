@@ -6,12 +6,12 @@ Medidor de volume do microfone com alerta sonoro e ícone na bandeja. Fora do ho
 
 Baixe o instalador mais recente em **Releases** (`LoudEnv-Setup-x.y.z.exe`). Ele instala em `%LOCALAPPDATA%\LoudEnv`, cria o atalho no menu Iniciar e pode iniciar o app ao final.
 
-Alternativa portátil: baixe `LoudEnv.Tray.exe` em Releases e execute. O executável é self-contained e não exige o .NET instalado.
+Para desenvolvimento, `publicar-tray.cmd` gera um executável portátil em `tray/`; ele não é publicado nos Releases.
 
 ## Uso
 
 - O ícone fica na bandeja. Verde: abaixo de 75% do limiar. Amarelo: entre 75% e 100%. Vermelho: no limiar ou acima. Cinza: fora do horário, pausado ou sem microfone.
-- Duplo clique (ou `Configurações...`) abre limiar, dispositivo, horário, log e som.
+- Duplo clique (ou `Configurações...`) abre limiar, dispositivo, horário, log, som e a opção de iniciar com o Windows.
 - Padrão: todos os dias, 22:00–07:00, limiar 0,20 de RMS, log em `%APPDATA%\LoudEnv\alertas.csv`.
 - Fora do horário a captura para. O log grava episódios que geraram aviso.
 - Configurações em `%APPDATA%\LoudEnv\settings.json`; são preservadas em atualizações.
@@ -37,7 +37,7 @@ dotnet run -- --alert --threshold 0.20 --device 1
 
 ## Release
 
-O workflow `.github/workflows/build.yml` roda em pushes para `main`, pull requests e tags `v*`. Ele publica o executável self-contained, gera o instalador com Inno Setup e envia os dois como artefatos. Em tags, também cria a Release.
+O workflow `.github/workflows/build.yml` roda em pushes para `main`, pull requests e tags `v*`. Ele publica o executável self-contained, gera o instalador com Inno Setup e envia o instalador como artefato. Em tags, também cria a Release somente com o instalador.
 
 Para gerar uma versão:
 

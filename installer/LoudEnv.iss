@@ -31,9 +31,13 @@ Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortugue
 
 [Tasks]
 Name: "desktopicon"; Description: "Criar atalho na área de trabalho"; GroupDescription: "Atalhos:"; Flags: unchecked
+Name: "startup"; Description: "Iniciar o LoudEnv com o Windows"; GroupDescription: "Opções:"; Flags: checkedonce
 
 [Files]
-Source: "..\publish\tray\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\publish\tray\*"; DestDir: "{app}"; Excludes: "*.pdb,LoudEnv.runtimeconfig.json"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Registry]
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "LoudEnv"; ValueData: """{app}\{#AppExeName}"""; Flags: uninsdeletevalue; Tasks: startup
 
 [Icons]
 Name: "{group}\LoudEnv"; Filename: "{app}\{#AppExeName}"
@@ -42,3 +46,10 @@ Name: "{autodesktop}\LoudEnv"; Filename: "{app}\{#AppExeName}"; Tasks: desktopic
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "Iniciar o LoudEnv"; Flags: nowait postinstall skipifsilent
+
+[Code]
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usPostUninstall then
+    RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\Run', 'LoudEnv');
+end;

@@ -13,6 +13,7 @@ Transformar o LoudEnv em um aplicativo de bandeja (tray) que mede o microfone e 
 - Fora do horário ativo: parar a captura e mostrar o ícone cinza.
 - Configuração por uma janela no tray, salva em `%APPDATA%\LoudEnv\settings.json`.
 - Threshold inicial 0,20 de RMS (ajuste fino dentro da janela).
+- Iniciar com o Windows: opção no instalador (marcada por padrão) e na janela de configurações.
 
 ## Arquitetura
 
@@ -102,10 +103,16 @@ Validações: início diferente do fim quando o horário está ativo; dispositiv
 - `tray/` e `alertas*.csv` ficam fora do git.
 - O console continua com `publicar.cmd` e `alerta.cmd`.
 
+## Iniciar com o Windows
+
+- Checkbox `Iniciar com o Windows` na janela de configurações.
+- Implementado pelo valor `LoudEnv` em `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, apontando para o executável atual entre aspas. Sem admin e sem tarefa agendada.
+- O instalador oferece a mesma opção, marcada por padrão. O desinstalador remove o valor mesmo que ele tenha sido criado depois pela janela de configurações.
+- Se o executável mudar de caminho, o checkbox aparece desmarcado e pode ser religado.
+
 ## Fora de escopo
 
 - Vários intervalos por dia, horários diferentes por dia da semana, exceções e feriados.
-- Iniciar com o Windows.
 - Histórico/gráfico no tray, notificações do Windows.
 - Alterar o threshold automaticamente.
 
