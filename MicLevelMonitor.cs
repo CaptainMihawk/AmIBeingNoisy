@@ -31,8 +31,10 @@ public sealed class MicLevelMonitor : IDisposable
     {
         using var capture = new WasapiCapture(_device);
         var window = new LevelWindow();
+        Exception? captureError = null;
 
         capture.DataAvailable += (_, e) => window.Add(capture.WaveFormat, e.Buffer, e.BytesRecorded);
+        capture.RecordingStopped += (_, e) => Volatile.Write(ref captureError, e.Exception);
 
         capture.StartRecording();
         try
@@ -40,6 +42,9 @@ public sealed class MicLevelMonitor : IDisposable
             while (!ct.IsCancellationRequested)
             {
                 await Task.Delay(PollIntervalMs, ct).ConfigureAwait(false);
+                var error = Volatile.Read(ref captureError);
+                if (error is not null)
+                    throw new InvalidOperationException($"Captura de áudio interrompida: {error.Message}", error);
                 level.Report(window.TakeReading());
             }
         }
