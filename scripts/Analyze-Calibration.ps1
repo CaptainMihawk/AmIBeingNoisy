@@ -87,7 +87,7 @@ else {
     Write-Host "`nVão entre não-alerta (p99) e grito (mínimo):"
     $gaps = @(foreach ($metric in 'Peak', 'Rms') {
         $na = [double[]]@($rows | Where-Object { $naoAlerta -contains $_.Label } | ForEach-Object { $_.$metric })
-        $gr = [double[]]@($rows | Where-Object { $_.Label -eq 'grito' } | ForEach-Object { $_.$metric })
+        $gr = [double[]]@($shouts | ForEach-Object { $_.$metric })
         if ($na.Count -eq 0 -or $gr.Count -eq 0) { continue }
         $p99 = Get-Percentile $na 0.99
         $minGrito = ($gr | Measure-Object -Minimum).Minimum
