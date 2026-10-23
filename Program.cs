@@ -146,7 +146,7 @@ public static class Program
         if (detector.Sample(reading.Rms))
         {
             Console.WriteLine();
-            Console.WriteLine($"GRITO {DateTime.Now:HH:mm:ss} rms {FormatValue(reading.Rms)}");
+            Console.WriteLine($"ALTO {DateTime.Now:HH:mm:ss} rms {FormatValue(reading.Rms)}");
         }
 
         string state = reading.Rms >= threshold ? "ACIMA" : "abaixo";
