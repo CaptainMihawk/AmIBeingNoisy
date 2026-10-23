@@ -7,14 +7,19 @@ namespace LoudEnv;
 public static class Program
 {
     private const string Usage =
-        "Uso: LoudEnv [--list | [--device <índice>] [--calibrate [--out <arquivo.csv>] | --threshold <0-1> [--alert]]].";
+        "Uso: LoudEnv [--list | [--device <índice>] [--calibrate [--out <arquivo.csv>] | --threshold <0-1> [--alert [--log <arquivo.csv>]]]]].";
 
     private const long AlertRepeatMs = 5000;
 
-    private sealed record Options(bool List, int? DeviceIndex, bool Calibrate, string? OutPath, float? Threshold, bool Alert);
+    private sealed record Options(
+        bool List, int? DeviceIndex, bool Calibrate, string? OutPath, float? Threshold, bool Alert, string? AlertLogPath);
 
     public static async Task<int> Main(string[] args)
     {
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            Console.Error.WriteLine(
+                $"Erro inesperado: {(e.ExceptionObject as Exception)?.Message ?? e.ExceptionObject?.ToString()}");
+
         try
         {
             var options = ParseArgs(args);
@@ -49,13 +54,19 @@ public static class Program
                 {
                     var clock = Stopwatch.StartNew();
                     var detector = new ThresholdDetector(threshold, options.Alert ? AlertRepeatMs : long.MaxValue);
+                    using var alertLog = options.AlertLogPath is null
+                        ? null
+                        : new AlertLog(options.AlertLogPath, monitor.DeviceName, threshold);
+                    if (options.AlertLogPath is not null)
+                        Console.WriteLine($"Registrando alertas em {Path.GetFullPath(options.AlertLogPath)}");
                     Console.WriteLine(options.Alert
                         ? $"Alerta ligado: RMS >= {FormatValue(threshold)} por {ThresholdDetector.RequiredWindows} janelas, " +
                           "repetindo a cada 5 s enquanto continuar alto... (Ctrl+C para sair)"
                         : $"Testando limiar {FormatValue(threshold)} de RMS " +
                           $"({ThresholdDetector.RequiredWindows} janelas seguidas para disparar)... (Ctrl+C para sair)");
                     await monitor.RunAsync(
-                        new InlineProgress<LevelReading>(reading => RenderThreshold(reading, threshold, detector, clock, options.Alert)),
+                        new InlineProgress<LevelReading>(
+                            reading => RenderThreshold(reading, threshold, detector, clock, options.Alert, alertLog)),
                         cts.Token);
                 }
                 else
@@ -89,6 +100,7 @@ public static class Program
         string? outPath = null;
         float? threshold = null;
         bool alert = false;
+        string? alertLogPath = null;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -114,6 +126,9 @@ public static class Program
                 case "--alert":
                     alert = true;
                     break;
+                case "--log" when i + 1 < args.Length:
+                    alertLogPath = args[++i];
+                    break;
                 default:
                     throw new ArgumentException(Usage);
             }
@@ -131,7 +146,10 @@ public static class Program
         if (alert && threshold is null)
             throw new ArgumentException("--alert exige --threshold.");
 
-        return new Options(list, deviceIndex, calibrate, outPath, threshold, alert);
+        if (alertLogPath is not null && !alert)
+            throw new ArgumentException("--log exige --alert.");
+
+        return new Options(list, deviceIndex, calibrate, outPath, threshold, alert, alertLogPath);
     }
 
     private static bool TryParseThreshold(string text, out float value)
@@ -158,10 +176,15 @@ public static class Program
         Console.Write("\r" + LevelRenderer.Format(reading.Peak));
 
     private static void RenderThreshold(
-        LevelReading reading, float threshold, ThresholdDetector detector, Stopwatch clock, bool alert)
+        LevelReading reading, float threshold, ThresholdDetector detector, Stopwatch clock, bool alert, AlertLog? log)
     {
+        bool above = reading.Rms >= threshold;
+        log?.Observe(reading.Rms, above);
+
         if (detector.Sample(reading.Rms, clock.ElapsedMilliseconds))
         {
+            log?.NoteAlert();
+
             if (alert)
                 AlertSound.Play();
 
@@ -169,7 +192,7 @@ public static class Program
             Console.WriteLine($"ALTO {DateTime.Now:HH:mm:ss} rms {FormatValue(reading.Rms)}");
         }
 
-        string state = reading.Rms >= threshold ? "ACIMA" : "abaixo";
+        string state = above ? "ACIMA" : "abaixo";
         Console.Write(
             $"\rrms {FormatValue(reading.Rms)} {LevelRenderer.Format(reading.Rms)} " +
             $"limiar {FormatValue(threshold)} {state}");

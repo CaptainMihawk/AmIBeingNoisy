@@ -16,10 +16,15 @@ public sealed class LevelWindow
         int count;
         if (format.Encoding == WaveFormatEncoding.IeeeFloat)
         {
-            count = bytesRecorded / 4;
-            for (int i = 0; i < count; i++)
+            int total = bytesRecorded / 4;
+            count = 0;
+            for (int i = 0; i < total; i++)
             {
                 float v = BitConverter.ToSingle(buffer, i * 4);
+                if (!float.IsFinite(v))
+                    continue;
+
+                count++;
                 float a = Math.Abs(v);
                 if (a > peak)
                     peak = a;

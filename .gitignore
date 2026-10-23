@@ -3,3 +3,5 @@ obj/
 .vs/
 *.user
 calibracao-*.csv
+dist/
+alertas*.csv

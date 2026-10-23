@@ -36,6 +36,23 @@ LoudEnv --alert --threshold <0-1> [--device <índice>]
 - Mensagens em português, exit codes 0 (sucesso e Ctrl+C) e 1 (uso, dispositivo, arquivo).
 - O parser atual continua igual para `--list`, `--device`, `--calibrate` e `--out`.
 
+## Emenda — 2026-10-23: log de alertas, robustez e uso diário
+
+**Motivo:** usar o alerta no dia a dia e coletar dados reais para ajustar o limiar e decidir a futura GUI/tray. O limiar provisório de 0,20 veio de uma sessão curta; o uso real dirá se ele está sensível demais.
+
+**Decisões:**
+
+- `--log <arquivo.csv>` exige `--alert`. Grava uma linha por episódio que gerou pelo menos um aviso (3 janelas ou mais acima do limiar), e não uma linha por aviso nem por blip de 100 ms.
+- O arquivo é aberto em modo append. Se não existir (ou estiver vazio), recebe o cabeçalho.
+- Colunas: `sessao_inicio;inicio;fim;duracao_s;rms_max;rms_medio;alertas;limiar;device`.
+- O episódio começa na primeira janela de 100 ms acima do limiar e termina na primeira abaixo. `alertas` conta quantos avisos sonoros ocorreram dentro do episódio (o primeiro em 300 ms e os seguintes a cada 5 s).
+- Ao encerrar com Ctrl+C, o episódio aberto é gravado com o último instante observado.
+- `LevelWindow` passa a ignorar amostras não finitas (NaN e infinito), para o CSV não receber `NaN`.
+- Um handler de `AppDomain.UnhandledException` imprime `Erro inesperado: ...` em português. Ele não impede o encerramento se a falha ocorrer dentro da thread do NAudio (remoção do microfone); serve para não sair sem mensagem.
+- Publicação para uso diário: `dotnet publish -c Release -o dist` e o atalho `alerta.cmd` na raiz, com `--alert --threshold 0.20 --device 1 --log alertas.csv`. `dist/` e `alertas*.csv` ficam fora do git.
+
+**Backlog (Fase 4):** tray icon com o medidor e horários em que o alerta vale. Desenhar depois de alguns dias de uso real.
+
 ## Fora de escopo
 
 GUI, overlay, volume do tom configurável, salvar o limiar entre execuções, limiar por horário, histórico de alertas.
