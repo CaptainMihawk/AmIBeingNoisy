@@ -36,36 +36,29 @@ function Format-Numero($Valor) {
     if ($Valor -is [double]) { $Valor.ToString('0.0000', $cultura) } else { $Valor }
 }
 
+$titulos = @{ Peak = 'Peak (pico):'; Rms = 'RMS:' }
 Write-Host "`nResumo por rótulo (janelas de 100 ms):"
-$rows | Group-Object Label | Sort-Object Name | ForEach-Object {
-    $peaks = [double[]]@($_.Group | ForEach-Object { $_.Peak })
-    $rms = [double[]]@($_.Group | ForEach-Object { $_.Rms })
-    [pscustomobject]@{
-        Rotulo  = $_.Name
-        Janelas = $_.Count
-        PeakMin = [math]::Round(($peaks | Measure-Object -Minimum).Minimum, 4)
-        PeakP50 = [math]::Round((Get-Percentile $peaks 0.50), 4)
-        PeakP95 = [math]::Round((Get-Percentile $peaks 0.95), 4)
-        PeakP99 = [math]::Round((Get-Percentile $peaks 0.99), 4)
-        PeakMax = [math]::Round(($peaks | Measure-Object -Maximum).Maximum, 4)
-        RmsMin  = [math]::Round(($rms | Measure-Object -Minimum).Minimum, 4)
-        RmsP50  = [math]::Round((Get-Percentile $rms 0.50), 4)
-        RmsP95  = [math]::Round((Get-Percentile $rms 0.95), 4)
-        RmsP99  = [math]::Round((Get-Percentile $rms 0.99), 4)
-        RmsMax  = [math]::Round(($rms | Measure-Object -Maximum).Maximum, 4)
-    }
-} | Select-Object Rotulo, Janelas,
-    @{ N = 'PeakMin'; E = { Format-Numero $_.PeakMin } },
-    @{ N = 'PeakP50'; E = { Format-Numero $_.PeakP50 } },
-    @{ N = 'PeakP95'; E = { Format-Numero $_.PeakP95 } },
-    @{ N = 'PeakP99'; E = { Format-Numero $_.PeakP99 } },
-    @{ N = 'PeakMax'; E = { Format-Numero $_.PeakMax } },
-    @{ N = 'RmsMin'; E = { Format-Numero $_.RmsMin } },
-    @{ N = 'RmsP50'; E = { Format-Numero $_.RmsP50 } },
-    @{ N = 'RmsP95'; E = { Format-Numero $_.RmsP95 } },
-    @{ N = 'RmsP99'; E = { Format-Numero $_.RmsP99 } },
-    @{ N = 'RmsMax'; E = { Format-Numero $_.RmsMax } } |
-    Format-Table -AutoSize
+foreach ($metric in 'Peak', 'Rms') {
+    Write-Host $titulos[$metric]
+    $rows | Group-Object Label | Sort-Object Name | ForEach-Object {
+        $valores = [double[]]@($_.Group | ForEach-Object { $_.$metric })
+        [pscustomobject]@{
+            Rotulo  = $_.Name
+            Janelas = $_.Count
+            Min     = [math]::Round(($valores | Measure-Object -Minimum).Minimum, 4)
+            P50     = [math]::Round((Get-Percentile $valores 0.50), 4)
+            P95     = [math]::Round((Get-Percentile $valores 0.95), 4)
+            P99     = [math]::Round((Get-Percentile $valores 0.99), 4)
+            Max     = [math]::Round(($valores | Measure-Object -Maximum).Maximum, 4)
+        }
+    } | Select-Object Rotulo, Janelas,
+        @{ N = 'Min'; E = { Format-Numero $_.Min } },
+        @{ N = 'P50'; E = { Format-Numero $_.P50 } },
+        @{ N = 'P95'; E = { Format-Numero $_.P95 } },
+        @{ N = 'P99'; E = { Format-Numero $_.P99 } },
+        @{ N = 'Max'; E = { Format-Numero $_.Max } } |
+        Format-Table -AutoSize
+}
 
 $shoutRows = @($rows | Where-Object { $_.Label -eq 'grito' })
 $shouts = @()
