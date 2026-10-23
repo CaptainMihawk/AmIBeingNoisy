@@ -35,6 +35,8 @@ public static class Program
                 if (options.Calibrate)
                 {
                     string outPath = options.OutPath ?? $"calibracao-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
+                    if (File.Exists(outPath))
+                        throw new IOException($"O arquivo já existe: {outPath}. Escolha outro --out.");
                     Console.WriteLine($"Gravando em {Path.GetFullPath(outPath)}");
                     Console.WriteLine("Teclas: 1 fala normal | 2 fala de jogo | 3 silêncio com jogo | 4 pausa | g grito (2 s)");
                     await CalibrationSession.RunAsync(monitor, outPath, cts.Token);
