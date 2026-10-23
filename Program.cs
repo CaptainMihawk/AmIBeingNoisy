@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.InteropServices;
 
 namespace LoudEnv;
@@ -5,9 +6,9 @@ namespace LoudEnv;
 public static class Program
 {
     private const string Usage =
-        "Uso: LoudEnv [--list | [--device <índice>] [--calibrate [--out <arquivo.csv>]]].";
+        "Uso: LoudEnv [--list | [--device <índice>] [--calibrate [--out <arquivo.csv>] | --threshold <0-1>]].";
 
-    private sealed record Options(bool List, int? DeviceIndex, bool Calibrate, string? OutPath);
+    private sealed record Options(bool List, int? DeviceIndex, bool Calibrate, string? OutPath, float? Threshold);
 
     public static async Task<int> Main(string[] args)
     {
@@ -41,6 +42,16 @@ public static class Program
                     Console.WriteLine("Teclas: 1 fala normal | 2 fala de jogo | 3 silêncio com jogo | 4 pausa | g grito (2 s)");
                     await CalibrationSession.RunAsync(monitor, outPath, cts.Token);
                 }
+                else if (options.Threshold is float threshold)
+                {
+                    var detector = new ThresholdDetector(threshold);
+                    Console.WriteLine(
+                        $"Testando limiar {FormatValue(threshold)} de RMS " +
+                        $"({ThresholdDetector.RequiredWindows} janelas seguidas para disparar)... (Ctrl+C para sair)");
+                    await monitor.RunAsync(
+                        new InlineProgress<LevelReading>(reading => RenderThreshold(reading, threshold, detector)),
+                        cts.Token);
+                }
                 else
                 {
                     Console.WriteLine("Monitorando o nível do microfone... (Ctrl+C para sair)");
@@ -70,6 +81,7 @@ public static class Program
         bool calibrate = false;
         int? deviceIndex = null;
         string? outPath = null;
+        float? threshold = null;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -88,6 +100,10 @@ public static class Program
                 case "--out" when i + 1 < args.Length:
                     outPath = args[++i];
                     break;
+                case "--threshold" when i + 1 < args.Length && TryParseThreshold(args[i + 1], out float value):
+                    threshold = value;
+                    i++;
+                    break;
                 default:
                     throw new ArgumentException(Usage);
             }
@@ -96,7 +112,18 @@ public static class Program
         if (outPath is not null && !calibrate)
             throw new ArgumentException(Usage);
 
-        return new Options(list, deviceIndex, calibrate, outPath);
+        if (threshold is not null && calibrate)
+            throw new ArgumentException("--threshold não combina com --calibrate.");
+
+        return new Options(list, deviceIndex, calibrate, outPath, threshold);
+    }
+
+    private static bool TryParseThreshold(string text, out float value)
+    {
+        value = 0f;
+        string normalized = text.Replace(',', '.');
+        return float.TryParse(normalized, NumberStyles.Float, CultureInfo.InvariantCulture, out value)
+               && value > 0f && value < 1f;
     }
 
     private static void PrintCaptureEndpoints()
@@ -113,4 +140,21 @@ public static class Program
 
     private static void RenderLevel(LevelReading reading) =>
         Console.Write("\r" + LevelRenderer.Format(reading.Peak));
+
+    private static void RenderThreshold(LevelReading reading, float threshold, ThresholdDetector detector)
+    {
+        if (detector.Sample(reading.Rms))
+        {
+            Console.WriteLine();
+            Console.WriteLine($"GRITO {DateTime.Now:HH:mm:ss} rms {FormatValue(reading.Rms)}");
+        }
+
+        string state = reading.Rms >= threshold ? "ACIMA" : "abaixo";
+        Console.Write(
+            $"\rrms {FormatValue(reading.Rms)} {LevelRenderer.Format(reading.Rms)} " +
+            $"limiar {FormatValue(threshold)} {state}");
+    }
+
+    private static string FormatValue(float value) =>
+        value.ToString("0.000", CultureInfo.InvariantCulture);
 }
