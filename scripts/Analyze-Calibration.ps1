@@ -3,18 +3,28 @@
     [string] $Path
 )
 
+$ErrorActionPreference = 'Stop'
+if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    throw "Arquivo não encontrado: $Path"
+}
+
 $inv = [Globalization.CultureInfo]::InvariantCulture
 $cultura = [Globalization.CultureInfo]::CurrentCulture
 $naoAlerta = @('fala_normal', 'fala_jogo', 'silencio_jogo', 'pausa')
 
-$rows = @(Import-Csv -Path $Path -Delimiter ';' -Encoding UTF8 | ForEach-Object {
-    [pscustomobject]@{
-        ElapsedMs = [long]$_.elapsed_ms
-        Label     = $_.label
-        Peak      = [double]::Parse($_.peak, $inv)
-        Rms       = [double]::Parse($_.rms, $inv)
-    }
-})
+try {
+    $rows = @(Import-Csv -Path $Path -Delimiter ';' -Encoding UTF8 | ForEach-Object {
+        [pscustomobject]@{
+            ElapsedMs = [long]$_.elapsed_ms
+            Label     = $_.label
+            Peak      = [double]::Parse($_.peak, [Globalization.NumberStyles]::Float, $inv)
+            Rms       = [double]::Parse($_.rms, [Globalization.NumberStyles]::Float, $inv)
+        }
+    })
+}
+catch {
+    throw "CSV inválido: valores de peak e rms devem usar ponto como decimal (ex.: 0.123456). Erro: $($_.Exception.Message)"
+}
 
 function Get-Percentile([double[]] $Values, [double] $P) {
     $sorted = @($Values | Sort-Object)
@@ -33,18 +43,26 @@ $rows | Group-Object Label | Sort-Object Name | ForEach-Object {
     [pscustomobject]@{
         Rotulo  = $_.Name
         Janelas = $_.Count
+        PeakMin = [math]::Round(($peaks | Measure-Object -Minimum).Minimum, 4)
         PeakP50 = [math]::Round((Get-Percentile $peaks 0.50), 4)
+        PeakP95 = [math]::Round((Get-Percentile $peaks 0.95), 4)
         PeakP99 = [math]::Round((Get-Percentile $peaks 0.99), 4)
         PeakMax = [math]::Round(($peaks | Measure-Object -Maximum).Maximum, 4)
+        RmsMin  = [math]::Round(($rms | Measure-Object -Minimum).Minimum, 4)
         RmsP50  = [math]::Round((Get-Percentile $rms 0.50), 4)
+        RmsP95  = [math]::Round((Get-Percentile $rms 0.95), 4)
         RmsP99  = [math]::Round((Get-Percentile $rms 0.99), 4)
         RmsMax  = [math]::Round(($rms | Measure-Object -Maximum).Maximum, 4)
     }
 } | Select-Object Rotulo, Janelas,
+    @{ N = 'PeakMin'; E = { Format-Numero $_.PeakMin } },
     @{ N = 'PeakP50'; E = { Format-Numero $_.PeakP50 } },
+    @{ N = 'PeakP95'; E = { Format-Numero $_.PeakP95 } },
     @{ N = 'PeakP99'; E = { Format-Numero $_.PeakP99 } },
     @{ N = 'PeakMax'; E = { Format-Numero $_.PeakMax } },
+    @{ N = 'RmsMin'; E = { Format-Numero $_.RmsMin } },
     @{ N = 'RmsP50'; E = { Format-Numero $_.RmsP50 } },
+    @{ N = 'RmsP95'; E = { Format-Numero $_.RmsP95 } },
     @{ N = 'RmsP99'; E = { Format-Numero $_.RmsP99 } },
     @{ N = 'RmsMax'; E = { Format-Numero $_.RmsMax } } |
     Format-Table -AutoSize
@@ -115,5 +133,10 @@ else {
     }
 }
 
-$saturados = @($shoutRows | Where-Object { $_.Peak -ge 0.99 }).Count
-Write-Host "Janelas de grito com pico >= 0.99: $saturados de $($shoutRows.Count) (muitas indicam saturação: ajustar ganho)"
+if ($shoutRows.Count -gt 0) {
+    $saturados = @($shoutRows | Where-Object { $_.Peak -ge 0.99 }).Count
+    Write-Host "Janelas de grito com pico >= 0.99: $saturados de $($shoutRows.Count) (muitas indicam saturação: ajustar ganho)"
+}
+else {
+    Write-Host "Sem janelas de grito: saturação não verificada."
+}
