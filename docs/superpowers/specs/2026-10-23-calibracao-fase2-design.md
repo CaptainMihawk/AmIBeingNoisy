@@ -93,6 +93,19 @@ Regras:
 - Se o vão for zero ou negativo, o limiar sozinho não separa. Nesse caso, o próximo passo volta para decisão com o usuário: tempo mínimo acima do limiar (por exemplo, 3 janelas seguidas) ou revisão do setup.
 - Se os gritos baterem repetidamente em 1,000, ajustar o ganho e repetir só o bloco de gritos.
 
+## Emenda — 2026-10-23: alerta de volume alto, não só grito
+
+**Motivo:** na sessão `calibracao-noite-01.csv`, a fala que o usuário considera capaz de acordar alguém mediu 0,20 de RMS, abaixo da fala de jogo (até 0,405). O usuário decidiu que comemoração de jogo também deve alertar: o objetivo é ter consciência do volume e se controlar, não detectar exclusivamente grito.
+
+**Decisão (aprovada pelo usuário):**
+
+- O evento deixa de ser `grito` e passa a ser `volume alto`. No modo de teste, a linha do evento é `ALTO`.
+- Limiar provisório: **RMS ≥ 0,20 por 3 janelas seguidas (300 ms)**. Não há tempo mínimo maior nesta fase; reações curtas de jogo entram de propósito.
+- Na sessão gravada, esse limiar gera 0 eventos de fala normal, 0 de silêncio com jogo, 1 de fala de jogo e 8 de gritos/rajadas. A comemoração de jogo entra por decisão do usuário.
+- O modo de teste é `--threshold 0,20` (aceita vírgula ou ponto).
+- O número é provisório: depende do ganho do microfone e não veio da sessão completa de 10 gritos. Se o ganho mudar, recalibrar. A sessão completa continua recomendada antes da Fase 3.
+- O critério de pronto da Fase 2 passa a ser este limiar provisório registrado com os números acima, mais a pendência da sessão completa anotada.
+
 ## Fora de escopo
 
 Alerta sonoro ou visual, tempo mínimo acima do limiar (Fase 3), limiares diferentes para dia e noite, persistência de configuração, interface gráfica.
