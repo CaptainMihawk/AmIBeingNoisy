@@ -167,6 +167,14 @@ public sealed class SettingsForm : Form
 
     private void BrowseLog()
     {
+        try
+        {
+            Directory.CreateDirectory(AppSettings.FolderPath);
+        }
+        catch (Exception)
+        {
+        }
+
         using var dialog = new SaveFileDialog
         {
             Filter = "CSV (*.csv)|*.csv|Todos os arquivos (*.*)|*.*",
@@ -187,12 +195,8 @@ public sealed class SettingsForm : Form
             return;
         }
 
-        if (_device.SelectedItem is not string device || string.IsNullOrWhiteSpace(device))
-        {
-            MessageBox.Show(this, "Selecione um dispositivo de captura.",
-                "LoudEnv", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
+        if (_device.SelectedItem is not string device)
+            device = "";
 
         string logPath = _logPath.Text.Trim();
         if (logPath.Length == 0)

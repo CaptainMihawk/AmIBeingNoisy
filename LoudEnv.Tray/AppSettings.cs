@@ -32,7 +32,9 @@ public sealed class AppSettings
             if (File.Exists(FilePath))
             {
                 var settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath), JsonOptions);
-                if (settings is not null)
+                if (settings is null)
+                    error = $"Arquivo de configuração vazio ou inválido: {FilePath}. Usando os padrões.";
+                else
                     return settings.Normalize();
             }
         }
@@ -52,12 +54,36 @@ public sealed class AppSettings
         if (string.IsNullOrWhiteSpace(LogPath))
             LogPath = Path.Combine(FolderPath, "alertas.csv");
 
+        if (ScheduleEnabled && Start == End)
+        {
+            Start = new TimeOnly(22, 0);
+            End = new TimeOnly(7, 0);
+        }
+
         return this;
     }
 
     public void Save()
     {
         Directory.CreateDirectory(FolderPath);
-        File.WriteAllText(FilePath, JsonSerializer.Serialize(this, JsonOptions));
+        string temp = FilePath + ".tmp";
+        try
+        {
+            File.WriteAllText(temp, JsonSerializer.Serialize(this, JsonOptions));
+            File.Move(temp, FilePath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temp))
+            {
+                try
+                {
+                    File.Delete(temp);
+                }
+                catch (IOException)
+                {
+                }
+            }
+        }
     }
 }

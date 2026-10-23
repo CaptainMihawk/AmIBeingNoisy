@@ -29,6 +29,8 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private AppSettings _settings;
     private bool _paused;
+    private bool _settingsOpen;
+    private DateTime _lastTextUpdate = DateTime.MinValue;
     private DateTime _nextRetry = DateTime.MinValue;
     private string? _lastError;
     private string? _captureError;
@@ -46,8 +48,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     public TrayApplicationContext()
     {
         _settings = AppSettings.Load(out string? loadError);
-        if (loadError is not null)
-            ShowBalloon("Configuração", loadError, ToolTipIcon.Warning);
+        bool firstRun = !File.Exists(AppSettings.FilePath);
 
         if (string.IsNullOrWhiteSpace(_settings.DeviceName))
         {
@@ -88,7 +89,10 @@ public sealed class TrayApplicationContext : ApplicationContext
         _uiTimer.Start();
 
         Evaluate();
-        ShowBalloon("LoudEnv", DescribeState(), ToolTipIcon.Info);
+        if (loadError is not null)
+            ShowBalloon("Configuração", loadError, ToolTipIcon.Warning);
+        else if (firstRun && _lastError is null)
+            ShowBalloon("LoudEnv", DescribeState(), ToolTipIcon.Info);
     }
 
     private void Evaluate()
@@ -134,6 +138,9 @@ public sealed class TrayApplicationContext : ApplicationContext
         Volatile.Write(ref _captureError, null);
         try
         {
+            if (string.IsNullOrWhiteSpace(_settings.DeviceName))
+                _settings.DeviceName = MicLevelMonitor.DefaultDeviceName();
+
             _monitor = new MicLevelMonitor(_settings.DeviceName);
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or COMException)
@@ -157,7 +164,13 @@ public sealed class TrayApplicationContext : ApplicationContext
                                        or ArgumentException or NotSupportedException)
         {
             _log = null;
+            _monitor?.Dispose();
+            _monitor = null;
             WarnOnce($"Sem log: {ex.Message}");
+            _nextRetry = DateTime.Now + RetryDelay;
+            SetState(IconState.Gray, "sem log");
+            UpdateTooltip();
+            return;
         }
 
         _detector = new ThresholdDetector(_settings.Threshold, AlertRepeatMs);
@@ -218,8 +231,13 @@ public sealed class TrayApplicationContext : ApplicationContext
                 ? IconState.Yellow
                 : IconState.Green;
 
-        SetState(state, $"ativo {_lastRms.ToString("0.000", CultureInfo.InvariantCulture)}");
-        UpdateTooltip();
+        DateTime now = DateTime.Now;
+        if (state != _state || (now - _lastTextUpdate).TotalSeconds >= 1)
+        {
+            SetState(state, $"ativo {_lastRms.ToString("0.000", CultureInfo.InvariantCulture)}");
+            UpdateTooltip();
+            _lastTextUpdate = now;
+        }
     }
 
     private void SetState(IconState state, string status)
@@ -252,35 +270,66 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private void StopCapture()
     {
-        if (_cts is not null)
-        {
-            try
-            {
-                _cts.Cancel();
-            }
-            catch (ObjectDisposedException)
-            {
-            }
+        var cts = _cts;
+        var capture = _capture;
+        if (cts is null || capture is null)
+            return;
 
-            try
-            {
-                _capture?.Wait(TimeSpan.FromSeconds(2));
-            }
-            catch (AggregateException)
-            {
-            }
+        try
+        {
+            cts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
         }
 
-        _log?.Dispose();
-        _log = null;
-        _monitor?.Dispose();
-        _monitor = null;
-        _cts?.Dispose();
+        bool stopped;
+        try
+        {
+            stopped = capture.Wait(TimeSpan.FromSeconds(2));
+        }
+        catch (Exception ex) when (ex is AggregateException or ObjectDisposedException)
+        {
+            stopped = true;
+        }
+
+        if (!stopped)
+            return;
+
+        var log = _log;
+        var monitor = _monitor;
         _cts = null;
         _capture = null;
+        _log = null;
+        _monitor = null;
         _detector = null;
         _clock = null;
         _lastRms = 0f;
+
+        try
+        {
+            log?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            WarnOnce($"Falha ao gravar o log: {ex.Message}");
+        }
+
+        try
+        {
+            monitor?.Dispose();
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            cts.Dispose();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
     }
 
     private void TogglePause()
@@ -302,25 +351,36 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private void OpenSettings()
     {
-        IReadOnlyList<string> devices;
-        try
-        {
-            devices = MicLevelMonitor.ListCaptureEndpoints().Select(endpoint => endpoint.Name).ToList();
-        }
-        catch
-        {
-            devices = Array.Empty<string>();
-        }
-
-        using var form = new SettingsForm(_settings, devices);
-        if (form.ShowDialog() != DialogResult.OK)
+        if (_settingsOpen)
             return;
 
-        StopCapture();
-        _settings = form.Settings;
-        _nextRetry = DateTime.MinValue;
-        _lastError = null;
-        Evaluate();
+        _settingsOpen = true;
+        try
+        {
+            IReadOnlyList<string> devices;
+            try
+            {
+                devices = MicLevelMonitor.ListCaptureEndpoints().Select(endpoint => endpoint.Name).ToList();
+            }
+            catch
+            {
+                devices = Array.Empty<string>();
+            }
+
+            using var form = new SettingsForm(_settings, devices);
+            if (form.ShowDialog() != DialogResult.OK)
+                return;
+
+            StopCapture();
+            _settings = form.Settings;
+            _nextRetry = DateTime.MinValue;
+            _lastError = null;
+            Evaluate();
+        }
+        finally
+        {
+            _settingsOpen = false;
+        }
     }
 
     private void OpenLog()
@@ -355,6 +415,9 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private void ShowBalloon(string title, string text, ToolTipIcon icon)
     {
+        if (_icon is null)
+            return;
+
         _icon.BalloonTipTitle = title;
         _icon.BalloonTipText = text;
         _icon.BalloonTipIcon = icon;
@@ -390,6 +453,8 @@ public sealed class TrayApplicationContext : ApplicationContext
         }
         finally
         {
+            _scheduleTimer.Dispose();
+            _uiTimer.Dispose();
             _icon.Visible = false;
             _icon.Dispose();
             _menu.Dispose();

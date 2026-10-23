@@ -114,7 +114,7 @@ Validações: início diferente do fim quando o horário está ativo; dispositiv
 - **Horário do sistema:** a agenda usa a hora local; mudanças de fuso ou horário de verão afetam a janela.
 - **Ícone não visível em jogo fullscreen exclusivo:** o som continua sendo o aviso principal.
 - **Dois áudios concorrentes:** o tray e o console não devem capturar o mesmo microfone ao mesmo tempo; o `Mutex` evita duas instâncias do tray, mas não impede o console aberto em paralelo. Documentar: feche o console antes de usar o tray.
-- **Log aberto no Excel:** a abertura falha; o aviso em português explica e a captura continua sem log.
+- **Log aberto no Excel:** a abertura falha; o aviso em português explica e a captura não inicia, com nova tentativa a cada 30 s.
 
 ## Testes e validação
 

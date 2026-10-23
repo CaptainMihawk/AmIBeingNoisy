@@ -98,23 +98,31 @@ public sealed class MicLevelMonitor : IDisposable
             throw new InvalidOperationException("Nenhum dispositivo de captura configurado.");
 
         var collection = _enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active);
-
+        var devices = new List<MMDevice>(collection.Count);
         for (int i = 0; i < collection.Count; i++)
+            devices.Add(collection[i]);
+
+        MMDevice? selected = devices.FirstOrDefault(
+            device => string.Equals(device.FriendlyName, name, StringComparison.OrdinalIgnoreCase));
+
+        selected ??= devices.FirstOrDefault(
+            device => device.FriendlyName.Contains(name, StringComparison.OrdinalIgnoreCase));
+
+        string available = string.Join(", ", devices.Select(device => device.FriendlyName));
+
+        foreach (var device in devices)
         {
-            if (string.Equals(collection[i].FriendlyName, name, StringComparison.OrdinalIgnoreCase))
-                return collection[i];
+            if (!ReferenceEquals(device, selected))
+                device.Dispose();
         }
 
-        for (int i = 0; i < collection.Count; i++)
+        if (selected is null)
         {
-            if (collection[i].FriendlyName.Contains(name, StringComparison.OrdinalIgnoreCase))
-                return collection[i];
+            throw new InvalidOperationException(
+                $"Dispositivo de captura não encontrado: {name}. Disponíveis: {(available.Length == 0 ? "(nenhum)" : available)}");
         }
 
-        var available = string.Join(", ", Enumerable.Range(0, collection.Count)
-            .Select(i => collection[i].FriendlyName));
-        throw new InvalidOperationException(
-            $"Dispositivo de captura não encontrado: {name}. Disponíveis: {(available.Length == 0 ? "(nenhum)" : available)}");
+        return selected;
     }
 
     public void Dispose()
