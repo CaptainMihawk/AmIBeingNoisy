@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using NAudio.CoreAudioApi;
+using NAudio.Wave;
 
 namespace LoudEnv;
 
@@ -29,11 +30,67 @@ public sealed class MicLevelMonitor : IDisposable
 
     public async Task RunAsync(IProgress<float> level, CancellationToken ct)
     {
-        while (!ct.IsCancellationRequested)
+        using var capture = new WasapiCapture(_device);
+        var sync = new object();
+        float peakSinceLastRead = 0f;
+
+        capture.DataAvailable += (_, e) =>
         {
-            level.Report(_device.AudioMeterInformation.MasterPeakValue);
-            await Task.Delay(PollIntervalMs, ct).ConfigureAwait(false);
+            float peak = PeakFromBuffer(capture.WaveFormat, e.Buffer, e.BytesRecorded);
+            lock (sync)
+            {
+                if (peak > peakSinceLastRead)
+                    peakSinceLastRead = peak;
+            }
+        };
+
+        capture.StartRecording();
+        try
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                await Task.Delay(PollIntervalMs, ct).ConfigureAwait(false);
+                float reported;
+                lock (sync)
+                {
+                    reported = peakSinceLastRead;
+                    peakSinceLastRead = 0f;
+                }
+                level.Report(Math.Clamp(reported, 0f, 1f));
+            }
         }
+        finally
+        {
+            capture.StopRecording();
+        }
+    }
+
+    private static float PeakFromBuffer(WaveFormat format, byte[] buffer, int bytesRecorded)
+    {
+        float peak = 0f;
+        if (format.Encoding == WaveFormatEncoding.IeeeFloat)
+        {
+            int count = bytesRecorded / 4;
+            for (int i = 0; i < count; i++)
+            {
+                float v = BitConverter.ToSingle(buffer, i * 4);
+                if (v < 0)
+                    v = -v;
+                if (v > peak)
+                    peak = v;
+            }
+        }
+        else
+        {
+            int count = bytesRecorded / 2;
+            for (int i = 0; i < count; i++)
+            {
+                float v = Math.Abs(BitConverter.ToInt16(buffer, i * 2)) / 32768f;
+                if (v > peak)
+                    peak = v;
+            }
+        }
+        return peak;
     }
 
     private MMDevice ResolveDefault()
