@@ -1,12 +1,9 @@
-using System.Globalization;
 using System.Runtime.InteropServices;
 
 namespace LoudEnv;
 
 public static class Program
 {
-    private const int BarWidth = 20;
-
     public static async Task<int> Main(string[] args)
     {
         try
@@ -30,7 +27,7 @@ public static class Program
                 cts.Cancel();
             };
 
-            var renderer = new InlineProgress<float>(RenderLevel);
+            var renderer = new InlineProgress<LevelReading>(RenderLevel);
             try
             {
                 await monitor.RunAsync(renderer, cts.Token);
@@ -72,20 +69,6 @@ public static class Program
             Console.WriteLine($"[{index}] {name}");
     }
 
-    private static void RenderLevel(float value)
-    {
-        float clamped = Math.Clamp(value, 0f, 1f);
-        int filled = (int)Math.Round(clamped * BarWidth);
-        string bar = new string('#', filled) + new string('-', BarWidth - filled);
-        Console.Write($"\r{clamped.ToString("0.000", CultureInfo.InvariantCulture)} [{bar}]");
-    }
-
-    private sealed class InlineProgress<T> : IProgress<T>
-    {
-        private readonly Action<T> _handler;
-
-        public InlineProgress(Action<T> handler) => _handler = handler;
-
-        public void Report(T value) => _handler(value);
-    }
+    private static void RenderLevel(LevelReading reading) =>
+        Console.Write("\r" + LevelRenderer.Format(reading.Peak));
 }
