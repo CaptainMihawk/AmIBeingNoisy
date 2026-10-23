@@ -4,21 +4,24 @@ namespace LoudEnv;
 
 public static class Program
 {
+    private const string Usage =
+        "Uso: LoudEnv [--list | [--device <índice>] [--calibrate [--out <arquivo.csv>]]].";
+
+    private sealed record Options(bool List, int? DeviceIndex, bool Calibrate, string? OutPath);
+
     public static async Task<int> Main(string[] args)
     {
         try
         {
-            if (args.Contains("--list"))
+            var options = ParseArgs(args);
+            if (options.List)
             {
                 PrintCaptureEndpoints();
                 return 0;
             }
 
-            int? deviceIndex = ParseDeviceIndex(args);
-            using var monitor = new MicLevelMonitor(deviceIndex);
-
+            using var monitor = new MicLevelMonitor(options.DeviceIndex);
             Console.WriteLine($"Dispositivo de captura: {monitor.DeviceName}");
-            Console.WriteLine("Monitorando o nível do microfone... (Ctrl+C para sair)");
 
             using var cts = new CancellationTokenSource();
             Console.CancelKeyPress += (_, e) =>
@@ -27,10 +30,20 @@ public static class Program
                 cts.Cancel();
             };
 
-            var renderer = new InlineProgress<LevelReading>(RenderLevel);
             try
             {
-                await monitor.RunAsync(renderer, cts.Token);
+                if (options.Calibrate)
+                {
+                    string outPath = options.OutPath ?? $"calibracao-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
+                    Console.WriteLine($"Gravando em {Path.GetFullPath(outPath)}");
+                    Console.WriteLine("Teclas: 1 fala normal | 2 fala de jogo | 3 silêncio com jogo | 4 pausa | g grito (2 s)");
+                    await CalibrationSession.RunAsync(monitor, outPath, cts.Token);
+                }
+                else
+                {
+                    Console.WriteLine("Monitorando o nível do microfone... (Ctrl+C para sair)");
+                    await monitor.RunAsync(new InlineProgress<LevelReading>(RenderLevel), cts.Token);
+                }
             }
             catch (OperationCanceledException)
             {
@@ -41,20 +54,47 @@ public static class Program
             Console.WriteLine("Encerrado.");
             return 0;
         }
-        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or COMException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or COMException
+                                       or IOException or UnauthorizedAccessException)
         {
             Console.Error.WriteLine($"Erro: {ex.Message}");
             return 1;
         }
     }
 
-    private static int? ParseDeviceIndex(string[] args)
+    private static Options ParseArgs(string[] args)
     {
-        if (args.Length == 0)
-            return null;
-        if (args.Length == 2 && args[0] == "--device" && int.TryParse(args[1], out int index))
-            return index;
-        throw new ArgumentException("Uso: LoudEnv [--list | --device <índice>].");
+        bool list = false;
+        bool calibrate = false;
+        int? deviceIndex = null;
+        string? outPath = null;
+
+        for (int i = 0; i < args.Length; i++)
+        {
+            switch (args[i])
+            {
+                case "--list":
+                    list = true;
+                    break;
+                case "--calibrate":
+                    calibrate = true;
+                    break;
+                case "--device" when i + 1 < args.Length && int.TryParse(args[i + 1], out int index):
+                    deviceIndex = index;
+                    i++;
+                    break;
+                case "--out" when i + 1 < args.Length:
+                    outPath = args[++i];
+                    break;
+                default:
+                    throw new ArgumentException(Usage);
+            }
+        }
+
+        if (outPath is not null && !calibrate)
+            throw new ArgumentException(Usage);
+
+        return new Options(list, deviceIndex, calibrate, outPath);
     }
 
     private static void PrintCaptureEndpoints()
