@@ -11,4 +11,8 @@
     <PackageReference Include="NAudio" Version="2.4.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="LoudEnv.Tray/**/*.cs" />
+  </ItemGroup>
+
 </Project>
