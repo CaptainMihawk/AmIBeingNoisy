@@ -19,7 +19,7 @@ public static class CalibrationSession
         });
 
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var keys = ReadKeysAsync(labeler, clock, stop.Token);
+        var keys = ReadKeysAsync(labeler, clock, stop);
         try
         {
             await monitor.RunAsync(progress, stop.Token);
@@ -37,16 +37,24 @@ public static class CalibrationSession
         }
     }
 
-    private static async Task ReadKeysAsync(CalibrationLabeler labeler, Stopwatch clock, CancellationToken ct)
+    private static async Task ReadKeysAsync(CalibrationLabeler labeler, Stopwatch clock, CancellationTokenSource stop)
     {
-        while (!ct.IsCancellationRequested)
+        try
         {
-            if (Console.KeyAvailable)
+            while (!stop.IsCancellationRequested)
             {
-                var key = Console.ReadKey(intercept: true);
-                labeler.Press(key.KeyChar, clock.ElapsedMilliseconds);
+                if (Console.KeyAvailable)
+                {
+                    var key = Console.ReadKey(intercept: true);
+                    labeler.Press(key.KeyChar, clock.ElapsedMilliseconds);
+                }
+                await Task.Delay(50, stop.Token).ConfigureAwait(false);
             }
-            await Task.Delay(50, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            stop.Cancel();
+            throw;
         }
     }
 }
