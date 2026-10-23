@@ -1,2 +1,2 @@
 @echo off
-dotnet publish -c Release -o "%~dp0dist"
+dotnet publish "%~dp0LoudEnv.csproj" -c Release -o "%~dp0dist"

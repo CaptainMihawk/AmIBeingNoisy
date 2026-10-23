@@ -7,7 +7,7 @@ namespace LoudEnv;
 public static class Program
 {
     private const string Usage =
-        "Uso: LoudEnv [--list | [--device <índice>] [--calibrate [--out <arquivo.csv>] | --threshold <0-1> [--alert [--log <arquivo.csv>]]]]].";
+        "Uso: LoudEnv [--list | [--device <índice>] [--calibrate [--out <arquivo.csv>] | --threshold <0-1> [--alert [--log <arquivo.csv>]]]].";
 
     private const long AlertRepeatMs = 5000;
 

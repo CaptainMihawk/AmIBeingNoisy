@@ -24,7 +24,16 @@ public sealed class AlertLog : IDisposable
         _threshold = threshold;
         _sessionStart = DateTime.Now.ToString(TimestampFormat, CultureInfo.InvariantCulture);
 
-        bool isNew = !File.Exists(path) || new FileInfo(path).Length == 0;
+        bool isNew;
+        try
+        {
+            isNew = !File.Exists(path) || new FileInfo(path).Length == 0;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            isNew = true;
+        }
+
         try
         {
             _writer = new StreamWriter(path, append: true, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false))
@@ -73,6 +82,7 @@ public sealed class AlertLog : IDisposable
         }
         else if (_start is not null)
         {
+            _last = DateTime.Now;
             CloseEpisode();
         }
     }
@@ -111,9 +121,14 @@ public sealed class AlertLog : IDisposable
 
     public void Dispose()
     {
-        if (_start is not null)
-            CloseEpisode();
-
-        _writer.Dispose();
+        try
+        {
+            if (_start is not null)
+                CloseEpisode();
+        }
+        finally
+        {
+            _writer.Dispose();
+        }
     }
 }
