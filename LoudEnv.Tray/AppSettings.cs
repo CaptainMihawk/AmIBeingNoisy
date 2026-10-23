@@ -80,7 +80,7 @@ public sealed class AppSettings
                 {
                     File.Delete(temp);
                 }
-                catch (IOException)
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
                 }
             }

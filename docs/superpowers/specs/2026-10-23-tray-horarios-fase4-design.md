@@ -52,7 +52,7 @@ Duplo clique abre as configurações. Na primeira execução, um balão informa 
 - `Som do alerta` (checkbox).
 - `Salvar` / `Cancelar`.
 
-Validações: início diferente do fim quando o horário está ativo; dispositivo existente; caminho de log não vazio; criar a pasta do log se necessário. Erros em português, sem fechar a janela.
+Validações: início diferente do fim quando o horário está ativo; dispositivo selecionado quando houver (sem dispositivo, salva vazio e o tray tenta resolver o padrão); caminho de log não vazio; criar a pasta do log se necessário. Erros em português, sem fechar a janela.
 
 ## Configuração persistida
 

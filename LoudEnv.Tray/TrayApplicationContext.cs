@@ -34,6 +34,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     private DateTime _nextRetry = DateTime.MinValue;
     private string? _lastError;
     private string? _captureError;
+    private string? _failureStatus;
     private CancellationTokenSource? _cts;
     private Task? _capture;
     private MicLevelMonitor? _monitor;
@@ -59,6 +60,18 @@ public sealed class TrayApplicationContext : ApplicationContext
             catch
             {
                 _settings.DeviceName = "";
+            }
+        }
+
+        if (firstRun)
+        {
+            try
+            {
+                _settings.Save();
+            }
+            catch (Exception)
+            {
+                // Persistir os padrões é opcional; o app segue com os valores em memória.
             }
         }
 
@@ -89,7 +102,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         _uiTimer.Start();
 
         Evaluate();
-        if (loadError is not null)
+        if (loadError is not null && _lastError is null)
             ShowBalloon("Configuração", loadError, ToolTipIcon.Warning);
         else if (firstRun && _lastError is null)
             ShowBalloon("LoudEnv", DescribeState(), ToolTipIcon.Info);
@@ -128,7 +141,12 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         if (_capture is null)
         {
-            SetState(IconState.Gray, _paused ? "pausado" : inSchedule ? "sem microfone" : "fora do horário");
+            string status = _paused
+                ? "pausado"
+                : !inSchedule
+                    ? "fora do horário"
+                    : _failureStatus ?? "sem microfone";
+            SetState(IconState.Gray, status);
             UpdateTooltip();
         }
     }
@@ -147,6 +165,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         {
             WarnOnce(ex.Message);
             _nextRetry = DateTime.Now + RetryDelay;
+            _failureStatus = "sem microfone";
             SetState(IconState.Gray, "sem microfone");
             UpdateTooltip();
             return;
@@ -164,10 +183,18 @@ public sealed class TrayApplicationContext : ApplicationContext
                                        or ArgumentException or NotSupportedException)
         {
             _log = null;
-            _monitor?.Dispose();
+            try
+            {
+                _monitor?.Dispose();
+            }
+            catch
+            {
+            }
+
             _monitor = null;
             WarnOnce($"Sem log: {ex.Message}");
             _nextRetry = DateTime.Now + RetryDelay;
+            _failureStatus = "sem log";
             SetState(IconState.Gray, "sem log");
             UpdateTooltip();
             return;
@@ -177,6 +204,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         _clock = Stopwatch.StartNew();
         _cts = new CancellationTokenSource();
         _capture = RunCaptureAsync(_cts.Token);
+        _failureStatus = null;
 
         if (_log is not null)
             _lastError = null;
@@ -329,8 +357,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         }
         catch (ObjectDisposedException)
         {
-        }
-    }
+        }    }
 
     private void TogglePause()
     {

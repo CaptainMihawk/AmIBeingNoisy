@@ -35,7 +35,10 @@ public sealed class MicLevelMonitor : IDisposable
         var collection = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active);
         var endpoints = new List<(int Index, string Name)>(collection.Count);
         for (int i = 0; i < collection.Count; i++)
-            endpoints.Add((i, collection[i].FriendlyName));
+        {
+            using var device = collection[i];
+            endpoints.Add((i, device.FriendlyName));
+        }
         return endpoints;
     }
 
