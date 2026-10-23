@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 
@@ -6,9 +7,11 @@ namespace LoudEnv;
 public static class Program
 {
     private const string Usage =
-        "Uso: LoudEnv [--list | [--device <índice>] [--calibrate [--out <arquivo.csv>] | --threshold <0-1>]].";
+        "Uso: LoudEnv [--list | [--device <índice>] [--calibrate [--out <arquivo.csv>] | --threshold <0-1> [--alert]]].";
 
-    private sealed record Options(bool List, int? DeviceIndex, bool Calibrate, string? OutPath, float? Threshold);
+    private const long AlertRepeatMs = 5000;
+
+    private sealed record Options(bool List, int? DeviceIndex, bool Calibrate, string? OutPath, float? Threshold, bool Alert);
 
     public static async Task<int> Main(string[] args)
     {
@@ -44,12 +47,15 @@ public static class Program
                 }
                 else if (options.Threshold is float threshold)
                 {
-                    var detector = new ThresholdDetector(threshold);
-                    Console.WriteLine(
-                        $"Testando limiar {FormatValue(threshold)} de RMS " +
-                        $"({ThresholdDetector.RequiredWindows} janelas seguidas para disparar)... (Ctrl+C para sair)");
+                    var clock = Stopwatch.StartNew();
+                    var detector = new ThresholdDetector(threshold, options.Alert ? AlertRepeatMs : long.MaxValue);
+                    Console.WriteLine(options.Alert
+                        ? $"Alerta ligado: RMS >= {FormatValue(threshold)} por {ThresholdDetector.RequiredWindows} janelas, " +
+                          "repetindo a cada 5 s enquanto continuar alto... (Ctrl+C para sair)"
+                        : $"Testando limiar {FormatValue(threshold)} de RMS " +
+                          $"({ThresholdDetector.RequiredWindows} janelas seguidas para disparar)... (Ctrl+C para sair)");
                     await monitor.RunAsync(
-                        new InlineProgress<LevelReading>(reading => RenderThreshold(reading, threshold, detector)),
+                        new InlineProgress<LevelReading>(reading => RenderThreshold(reading, threshold, detector, clock, options.Alert)),
                         cts.Token);
                 }
                 else
@@ -82,6 +88,7 @@ public static class Program
         int? deviceIndex = null;
         string? outPath = null;
         float? threshold = null;
+        bool alert = false;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -104,6 +111,9 @@ public static class Program
                     threshold = value;
                     i++;
                     break;
+                case "--alert":
+                    alert = true;
+                    break;
                 default:
                     throw new ArgumentException(Usage);
             }
@@ -112,10 +122,16 @@ public static class Program
         if (outPath is not null && !calibrate)
             throw new ArgumentException(Usage);
 
-        if (threshold is not null && calibrate)
+        if (calibrate && alert)
+            throw new ArgumentException("--alert não combina com --calibrate.");
+
+        if (calibrate && threshold is not null)
             throw new ArgumentException("--threshold não combina com --calibrate.");
 
-        return new Options(list, deviceIndex, calibrate, outPath, threshold);
+        if (alert && threshold is null)
+            throw new ArgumentException("--alert exige --threshold.");
+
+        return new Options(list, deviceIndex, calibrate, outPath, threshold, alert);
     }
 
     private static bool TryParseThreshold(string text, out float value)
@@ -141,10 +157,14 @@ public static class Program
     private static void RenderLevel(LevelReading reading) =>
         Console.Write("\r" + LevelRenderer.Format(reading.Peak));
 
-    private static void RenderThreshold(LevelReading reading, float threshold, ThresholdDetector detector)
+    private static void RenderThreshold(
+        LevelReading reading, float threshold, ThresholdDetector detector, Stopwatch clock, bool alert)
     {
-        if (detector.Sample(reading.Rms))
+        if (detector.Sample(reading.Rms, clock.ElapsedMilliseconds))
         {
+            if (alert)
+                AlertSound.Play();
+
             Console.WriteLine();
             Console.WriteLine($"ALTO {DateTime.Now:HH:mm:ss} rms {FormatValue(reading.Rms)}");
         }
