@@ -31,6 +31,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     private bool _paused;
     private DateTime _nextRetry = DateTime.MinValue;
     private string? _lastError;
+    private string? _captureError;
     private CancellationTokenSource? _cts;
     private Task? _capture;
     private MicLevelMonitor? _monitor;
@@ -92,6 +93,15 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private void Evaluate()
     {
+        string? captureError = Volatile.Read(ref _captureError);
+        if (captureError is not null)
+        {
+            Volatile.Write(ref _captureError, null);
+            WarnOnce(captureError);
+            SetState(IconState.Gray, "sem microfone");
+            UpdateTooltip();
+        }
+
         if (_capture is not null && _capture.IsCompleted)
         {
             StopCapture();
@@ -121,6 +131,7 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private void StartCapture()
     {
+        Volatile.Write(ref _captureError, null);
         try
         {
             _monitor = new MicLevelMonitor(_settings.DeviceName);
@@ -142,7 +153,8 @@ public sealed class TrayApplicationContext : ApplicationContext
 
             _log = new AlertLog(_settings.LogPath, _monitor.DeviceName, _settings.Threshold);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                       or ArgumentException or NotSupportedException)
         {
             _log = null;
             WarnOnce($"Sem log: {ex.Message}");
@@ -164,16 +176,14 @@ public sealed class TrayApplicationContext : ApplicationContext
     {
         try
         {
-            await _monitor!.RunAsync(new InlineProgress<LevelReading>(OnReading), ct);
+            await _monitor!.RunAsync(new InlineProgress<LevelReading>(OnReading), ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
         }
         catch (Exception ex)
         {
-            WarnOnce(ex.Message);
-            SetState(IconState.Gray, "sem microfone");
-            UpdateTooltip();
+            Volatile.Write(ref _captureError, ex.Message);
         }
     }
 
@@ -374,11 +384,17 @@ public sealed class TrayApplicationContext : ApplicationContext
     {
         _scheduleTimer.Stop();
         _uiTimer.Stop();
-        StopCapture();
-        _icon.Visible = false;
-        _icon.Dispose();
-        _menu.Dispose();
-        _icons.Dispose();
-        base.ExitThreadCore();
+        try
+        {
+            StopCapture();
+        }
+        finally
+        {
+            _icon.Visible = false;
+            _icon.Dispose();
+            _menu.Dispose();
+            _icons.Dispose();
+            base.ExitThreadCore();
+        }
     }
 }

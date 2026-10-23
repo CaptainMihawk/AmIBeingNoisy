@@ -94,6 +94,9 @@ public sealed class MicLevelMonitor : IDisposable
 
     private MMDevice ResolveByName(string name)
     {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new InvalidOperationException("Nenhum dispositivo de captura configurado.");
+
         var collection = _enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active);
 
         for (int i = 0; i < collection.Count; i++)
