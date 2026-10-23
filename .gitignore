@@ -6,3 +6,5 @@ calibracao-*.csv
 dist/
 alertas*.csv
 tray/
+publish/
+installer/dist/
